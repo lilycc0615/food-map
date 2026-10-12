@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>熱門餐廳搜尋器 (v10.2 新元件完美版)</title>
+    <title>熱門餐廳搜尋器 (v11.0 獨旅模式版)</title>
     <style>
         /* --- 全域設定 --- */
         body, html { 
@@ -21,12 +21,10 @@
             position: sticky; top: 0; z-index: 1000; 
         }
 
-        .search-box { display: flex; gap: 8px; align-items: center; width: 100%; }
+        .search-box { display: flex; gap: 8px; align-items: center; width: 100%; flex-wrap: wrap; }
 
-        /* 新版 Google 搜尋框容器 */
-        #autocomplete-container {
-            flex: 3; min-width: 200px;
-        }
+        /* 輸入框群組 */
+        #autocomplete-container { flex: 3; min-width: 200px; }
         
         gmp-place-autocomplete {
             width: 100%;
@@ -35,12 +33,17 @@
             --gmp-place-autocomplete-input-padding: 10px;
         }
 
-        /* 距離輸入框 */
-        .radius-group { position: relative; width: 85px; flex-shrink: 0; }
-        input#radius {
-            width: 100%; padding: 12px 5px; font-size: 16px; text-align: center;
+        /* 距離與情境選單 */
+        .filter-group { display: flex; gap: 8px; flex: 2; min-width: 220px; }
+        
+        .radius-group, .style-group { position: relative; flex: 1; }
+        
+        input#radius, select#dining-style {
+            width: 100%; padding: 12px 5px; font-size: 15px; text-align: center;
             border: 1px solid #ddd; border-radius: 8px; outline: none; background: #fff; box-sizing: border-box;
+            cursor: pointer;
         }
+        select#dining-style { text-align: left; padding: 12px 10px; }
         
         /* 搜尋按鈕 */
         button#search-btn { 
@@ -52,7 +55,8 @@
         .btn-text { display: none; }
         .btn-icon { display: inline; }
         @media (min-width: 769px) { 
-            .btn-text { display: inline; } .btn-icon { display: none; } .radius-group { width: 120px; }
+            .search-box { flex-wrap: nowrap; }
+            .btn-text { display: inline; } .btn-icon { display: none; } 
         }
 
         #status { 
@@ -85,6 +89,7 @@
         .rank { background: #999; color: white; width: 24px; height: 24px; border-radius: 50%; text-align: center; line-height: 24px; font-size: 12px; flex-shrink: 0; margin-top: 2px; }
         .top-3 { background: #f44336; }
         .type-badge { font-size: 11px; color: #666; background: #eee; padding: 2px 6px; border-radius: 4px; margin-left: 5px; }
+        .solo-badge { background: #e6f4ea; color: #1e8e3e; } /* 獨旅標籤顏色 */
 
         .info { flex: 1; }
         .info h3 { margin: 0 0 5px; font-size: 16px; color: #202124; line-height: 1.4; }
@@ -96,6 +101,8 @@
             .content-wrapper { flex-direction: column; padding: 0; gap: 0; }
             #map-container { flex: none; width: 100%; height: 35vh; border-radius: 0; }
             #list-container { flex: none; width: 100%; border-radius: 0; box-shadow: none; border: none; padding-bottom: 50px; }
+            .filter-group { width: 100%; }
+            button#search-btn { width: 100%; }
         }
 
         .gm-style-iw { padding: 0 !important; }
@@ -112,13 +119,23 @@
             
             <div id="autocomplete-container"></div>
             
-            <div class="radius-group">
-                <input type="number" id="radius" value="1000" min="100" max="50000" step="100" list="radius-presets" placeholder="半徑">
-                <datalist id="radius-presets">
-                    <option value="500">500m</option>
-                    <option value="1000">1km</option>
-                    <option value="3000">3km</option>
-                </datalist>
+            <div class="filter-group">
+                <div class="radius-group">
+                    <input type="number" id="radius" value="1000" min="100" max="50000" step="100" list="radius-presets" placeholder="半徑">
+                    <datalist id="radius-presets">
+                        <option value="500">500m</option>
+                        <option value="1000">1km</option>
+                        <option value="3000">3km</option>
+                    </datalist>
+                </div>
+                
+                <!-- 🔥 新增：用餐情境篩選 🔥 -->
+                <div class="style-group">
+                    <select id="dining-style">
+                        <option value="all">🍽️ 不限類型</option>
+                        <option value="solo">🙋‍♂️ 獨自用餐 (拉麵/咖啡/小吃)</option>
+                    </select>
+                </div>
             </div>
 
             <button id="search-btn" onclick="manualSearch()">
@@ -134,7 +151,7 @@
         
         <div id="list-container">
             <div class="list-header">
-                <span>排序：評論數 (High to Low)</span>
+                <span id="sort-title">排序：評論數 (High to Low)</span>
                 <span style="font-size:11px; color:#888;">混合結果</span>
             </div>
             <ul id="list">
@@ -205,27 +222,16 @@
         
         container.appendChild(autocompleteElement);
 
-        // 🔥 更新了 Google 官方的事件名稱與取值方式 🔥
         autocompleteElement.addEventListener("gmp-select", async (event) => {
             let place;
-            // 相容不同的事件回傳格式
-            if (event.placePrediction) {
-                place = event.placePrediction.toPlace();
-            } else if (event.place) {
-                place = event.place;
-            }
+            if (event.placePrediction) place = event.placePrediction.toPlace();
+            else if (event.place) place = event.place;
             
-            if (!place) {
-                manualSearch();
-                return;
-            }
+            if (!place) { manualSearch(); return; }
             
             try {
                 await place.fetchFields({ fields: ['displayName', 'location'] });
-                
-                if(place.location && place.displayName) {
-                    executeRestaurantSearch(place.location, place.displayName);
-                }
+                if(place.location && place.displayName) executeRestaurantSearch(place.location, place.displayName);
             } catch (err) {
                 console.error("獲取地點資料失敗", err);
             }
@@ -242,29 +248,18 @@
     async function manualSearch() {
         let query = "";
         
-        // 🔥 破解 Google 新元件：直接潛入影子 DOM (Shadow DOM) 抓出輸入的文字 🔥
         if (autocompleteElement && autocompleteElement.shadowRoot) {
             const innerInput = autocompleteElement.shadowRoot.querySelector('input');
-            if (innerInput) {
-                query = innerInput.value;
-            }
+            if (innerInput) query = innerInput.value;
         }
         
-        // 備用抓取方法
-        if (!query && autocompleteElement) {
-            query = autocompleteElement.value || "";
-        }
+        if (!query && autocompleteElement) query = autocompleteElement.value || "";
 
-        if (!query || query.trim() === "") {
-            return alert("請輸入地點！");
-        }
+        if (!query || query.trim() === "") return alert("請輸入地點！");
         
         document.getElementById('status').innerText = "🔍 搜尋地點中...";
         try {
-            const { places } = await Place.searchByText({ 
-                textQuery: query, 
-                fields: ['displayName', 'location', 'userRatingCount'] 
-            });
+            const { places } = await Place.searchByText({ textQuery: query, fields: ['displayName', 'location', 'userRatingCount'] });
             if (!places || places.length === 0) throw new Error("找不到該地點");
             places.sort((a, b) => (b.userRatingCount || 0) - (a.userRatingCount || 0));
             executeRestaurantSearch(places[0].location, places[0].displayName);
@@ -277,6 +272,8 @@
         const status = document.getElementById('status');
         const list = document.getElementById('list');
         const radiusInput = document.getElementById('radius');
+        const diningStyle = document.getElementById('dining-style').value; // 取得用餐情境
+        
         let radius = parseInt(radiusInput.value);
         if(isNaN(radius) || radius < 100) radius = 1000;
 
@@ -295,20 +292,37 @@
         currentMarkers.push(centerMarker);
 
         try {
+            // 🔥 根據選擇的情境，動態改變要搜尋的餐廳類型 🔥
+            let types1, types2, types3;
+
+            if (diningStyle === 'solo') {
+                // 【獨旅模式】：過濾掉聚餐大餐廳，專攻單人友善小店
+                document.getElementById('sort-title').innerText = "排序：獨旅友善店型優先";
+                types1 = ['ramen_restaurant', 'fast_food_restaurant']; // 拉麵、速食最適合單人
+                types2 = ['cafe', 'coffee_shop', 'tea_house'];         // 咖啡廳
+                types3 = ['meal_takeaway', 'bakery'];                  // 外帶小吃、便當
+            } else {
+                // 【預設模式】：全類型混合
+                document.getElementById('sort-title').innerText = "排序：評論數 (High to Low)";
+                types1 = ['restaurant', 'chinese_restaurant', 'japanese_restaurant', 'ramen_restaurant'];
+                types2 = ['cafe', 'coffee_shop', 'tea_house', 'bakery', 'bar', 'ice_cream_shop'];
+                types3 = ['meal_takeaway', 'fast_food_restaurant', 'meal_delivery'];
+            }
+
             const p1 = Place.searchNearby({
                 fields: ['displayName', 'location', 'rating', 'userRatingCount', 'formattedAddress', 'id', 'types'],
                 locationRestriction: { center: locationCoords, radius: radius },
-                includedPrimaryTypes: ['restaurant', 'chinese_restaurant', 'japanese_restaurant', 'ramen_restaurant'], maxResultCount: 20
+                includedPrimaryTypes: types1, maxResultCount: 20
             });
             const p2 = Place.searchNearby({
                 fields: ['displayName', 'location', 'rating', 'userRatingCount', 'formattedAddress', 'id', 'types'],
                 locationRestriction: { center: locationCoords, radius: radius },
-                includedPrimaryTypes: ['cafe', 'coffee_shop', 'tea_house', 'bakery', 'bar', 'ice_cream_shop'], maxResultCount: 20
+                includedPrimaryTypes: types2, maxResultCount: 20
             });
             const p3 = Place.searchNearby({
                 fields: ['displayName', 'location', 'rating', 'userRatingCount', 'formattedAddress', 'id', 'types'],
                 locationRestriction: { center: locationCoords, radius: radius },
-                includedPrimaryTypes: ['meal_takeaway', 'fast_food_restaurant', 'meal_delivery'], maxResultCount: 20
+                includedPrimaryTypes: types3, maxResultCount: 20
             });
 
             const results = await Promise.all([p1, p2, p3]);
@@ -316,13 +330,15 @@
             results.forEach(res => { if(res.places) allPlaces = allPlaces.concat(res.places); });
 
             if (allPlaces.length === 0) {
-                status.innerText = `⚠️ 範圍內無資料`; list.innerHTML = '<li style="justify-content: center;">無資料</li>'; return;
+                status.innerText = `⚠️ 範圍內無資料`; list.innerHTML = '<li style="justify-content: center;">無符合條件的資料</li>'; return;
             }
 
             const uniquePlaces = new Map();
             allPlaces.forEach(place => { if(!uniquePlaces.has(place.id)) uniquePlaces.set(place.id, place); });
             
             const finalResults = Array.from(uniquePlaces.values());
+            
+            // 排序邏輯
             finalResults.sort((a, b) => (b.userRatingCount || 0) - (a.userRatingCount || 0));
             const topResults = finalResults.slice(0, 30);
 
@@ -337,18 +353,21 @@
                 const rankClass = (index + 1) <= 3 ? "rank top-3" : "rank";
                 
                 let typeLabel = "";
+                let badgeClass = "type-badge";
                 const types = place.types || [];
-                if(types.includes('cafe') || types.includes('coffee_shop') || types.includes('tea_house')) typeLabel = "飲料/咖啡";
-                else if(types.includes('ramen_restaurant')) typeLabel = "拉麵";
-                else if(types.includes('bakery')) typeLabel = "烘焙";
-                else if(types.includes('meal_takeaway')) typeLabel = "外帶";
-                else typeLabel = "餐飲";
+                
+                if(types.includes('ramen_restaurant')) { typeLabel = "一人友善"; badgeClass += " solo-badge"; }
+                else if(types.includes('cafe') || types.includes('coffee_shop')) { typeLabel = "單人座位多"; badgeClass += " solo-badge"; }
+                else if(types.includes('meal_takeaway')) { typeLabel = "外帶便當"; badgeClass += " solo-badge"; }
+                else if(types.includes('fast_food_restaurant')) { typeLabel = "速食"; badgeClass += " solo-badge"; }
+                else if(types.includes('bakery')) { typeLabel = "烘焙輕食"; }
+                else { typeLabel = "餐飲"; }
 
                 const item = document.createElement('li');
                 item.innerHTML = `
                     <div class="${rankClass}">${index + 1}</div>
                     <div class="info">
-                        <h3>${name} <span style="font-size:0.8em; color:#fbbc04;">★${rating}</span><span class="type-badge">${typeLabel}</span></h3>
+                        <h3>${name} <span style="font-size:0.8em; color:#fbbc04;">★${rating}</span><span class="${badgeClass}">${typeLabel}</span></h3>
                         <p>${address}</p>
                         <div class="meta-tag">🔥 ${reviews.toLocaleString()} 則評論</div>
                     </div>
