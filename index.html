@@ -3,53 +3,47 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>熱門餐廳搜尋器 (v9.0 穩定版)</title>
+    <title>熱門餐廳搜尋器 (v10.0 全新元件版)</title>
     <style>
         /* --- 全域設定 --- */
         body, html { 
             margin: 0; font-family: 'Microsoft JhengHei', sans-serif; 
-            background: #f4f7f6; 
-            overflow-x: hidden; 
+            background: #f4f7f6; overflow-x: hidden; 
         }
         
         .main-container {
-            max-width: 1200px; margin: 0 auto; 
-            min-height: 100vh; 
-            display: flex; flex-direction: column;
+            max-width: 1200px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column;
         }
 
-        /* --- 搜尋區塊 --- */
+        /* --- 搜尋區塊 (Sticky) --- */
         .search-section {
-            background: white; padding: 10px; 
-            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            background: white; padding: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);
             position: sticky; top: 0; z-index: 1000; 
         }
 
         .search-box { display: flex; gap: 8px; align-items: center; width: 100%; }
 
-        .input-wrapper { position: relative; flex: 1; display: flex; align-items: center; }
+        /* 新版 Google 搜尋框容器 */
+        #autocomplete-container {
+            flex: 3; min-width: 200px;
+        }
         
-        input#address { 
-            width: 100%; padding: 12px 35px 12px 12px; 
-            font-size: 16px; border: 1px solid #ddd; border-radius: 8px; outline: none; 
-            box-sizing: border-box; background: #fff;
-        }
-        input#address:focus { border-color: #4285F4; }
-
-        .clear-btn {
-            position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
-            background: #e0e0e0; color: #555; border: none; border-radius: 50%;
-            width: 22px; height: 22px; line-height: 22px; text-align: center;
-            font-size: 14px; cursor: pointer; display: none; padding: 0;
+        /* 針對新版 Web Component 的基本微調 */
+        gmp-place-autocomplete {
+            width: 100%;
+            --gmp-place-autocomplete-input-border-radius: 8px;
+            --gmp-place-autocomplete-input-border: 1px solid #ddd;
+            --gmp-place-autocomplete-input-padding: 10px;
         }
 
+        /* 距離輸入框 */
         .radius-group { position: relative; width: 85px; flex-shrink: 0; }
         input#radius {
             width: 100%; padding: 12px 5px; font-size: 16px; text-align: center;
-            border: 1px solid #ddd; border-radius: 8px; outline: none;
-            box-sizing: border-box; background: #fff;
+            border: 1px solid #ddd; border-radius: 8px; outline: none; background: #fff; box-sizing: border-box;
         }
         
+        /* 搜尋按鈕 */
         button#search-btn { 
             flex-shrink: 0; padding: 12px 15px; font-size: 16px; 
             background: #4285F4; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; 
@@ -59,9 +53,7 @@
         .btn-text { display: none; }
         .btn-icon { display: inline; }
         @media (min-width: 769px) { 
-            .btn-text { display: inline; } 
-            .btn-icon { display: none; } 
-            .radius-group { width: 120px; }
+            .btn-text { display: inline; } .btn-icon { display: none; } .radius-group { width: 120px; }
         }
 
         #status { 
@@ -73,15 +65,11 @@
         /* --- 內容區塊 --- */
         .content-wrapper { flex: 1; display: flex; gap: 15px; padding: 10px; }
         
-        #map-container { 
-            flex: 6; background: #eee; border-radius: 12px; overflow: hidden; 
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1); height: 500px; 
-        }
+        #map-container { flex: 6; background: #eee; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.1); height: 500px; }
         #map { width: 100%; height: 100%; }
         
         #list-container { 
-            flex: 4; background: white; border-radius: 12px; 
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1); border: 1px solid #eee;
+            flex: 4; background: white; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); border: 1px solid #eee;
             display: flex; flex-direction: column;
         }
 
@@ -104,14 +92,13 @@
         .info p { margin: 0; color: #5f6368; font-size: 13px; }
         .meta-tag { display: inline-block; background: #e8f0fe; color: #1967d2; font-size: 12px; padding: 4px 8px; border-radius: 4px; margin-top: 6px; }
 
-        /* --- 手機版專用調整 (<= 768px) --- */
+        /* --- 手機版專用調整 --- */
         @media (max-width: 768px) {
             .content-wrapper { flex-direction: column; padding: 0; gap: 0; }
             #map-container { flex: none; width: 100%; height: 35vh; border-radius: 0; }
             #list-container { flex: none; width: 100%; border-radius: 0; box-shadow: none; border: none; padding-bottom: 50px; }
         }
 
-        /* InfoWindow */
         .gm-style-iw { padding: 0 !important; }
         .custom-infowindow { padding: 10px; max-width: 220px; }
         .custom-infowindow h3 { margin: 0 0 5px 0; font-size: 15px; }
@@ -123,10 +110,9 @@
 <div class="main-container">
     <div class="search-section">
         <div class="search-box">
-            <div class="input-wrapper">
-                <input type="text" id="address" placeholder="地點" oninput="toggleClearBtn()">
-                <button class="clear-btn" id="clear-btn" onclick="clearAddress()">×</button>
-            </div>
+            
+            <!-- 新版 Google Autocomplete 容器 -->
+            <div id="autocomplete-container"></div>
             
             <div class="radius-group">
                 <input type="number" id="radius" value="1000" min="100" max="50000" step="100" list="radius-presets" placeholder="半徑">
@@ -173,23 +159,11 @@
     });
 
     let map;
-    let Place, AdvancedMarkerElement, Autocomplete, InfoWindow;
+    let Place, AdvancedMarkerElement, PlaceAutocompleteElement, InfoWindow;
     let currentMarkers = [];
     let globalInfoWindow; 
     let markersMap = new Map();
-
-    function toggleClearBtn() {
-        const input = document.getElementById('address');
-        const btn = document.getElementById('clear-btn');
-        btn.style.display = input.value.length > 0 ? 'block' : 'none';
-    }
-
-    function clearAddress() {
-        const input = document.getElementById('address');
-        input.value = '';
-        toggleClearBtn();
-        input.focus();
-    }
+    let autocompleteElement; // 儲存全域的新版搜尋框元件
 
     async function initApp() {
         if(!MY_API_KEY || MY_API_KEY.includes("在此處")) {
@@ -201,7 +175,8 @@
             const markerLib = await google.maps.importLibrary("marker");
 
             Place = placesLib.Place;
-            Autocomplete = placesLib.Autocomplete;
+            // 🔥 載入最新版的 PlaceAutocompleteElement 🔥
+            PlaceAutocompleteElement = placesLib.PlaceAutocompleteElement; 
             AdvancedMarkerElement = markerLib.AdvancedMarkerElement;
             InfoWindow = mapsLib.InfoWindow;
 
@@ -211,7 +186,9 @@
             });
 
             globalInfoWindow = new InfoWindow({ minWidth: 200 });
-            initAutocomplete();
+            
+            // 初始化新版搜尋框
+            initNewAutocomplete();
             
             document.getElementById('status').innerText = "✅ 準備就緒";
             document.getElementById('status').classList.add("success-msg");
@@ -223,17 +200,32 @@
     }
     initApp();
 
-    function initAutocomplete() {
-        const input = document.getElementById("address");
-        const autocomplete = new Autocomplete(input, {
-            fields: ["geometry", "name", "formatted_address"],
-            types: ["establishment", "geocode"], componentRestrictions: { country: "tw" }
+    function initNewAutocomplete() {
+        const container = document.getElementById("autocomplete-container");
+        
+        // 建立最新版的元件
+        autocompleteElement = new PlaceAutocompleteElement({
+            componentRestrictions: { country: ["tw"] },
+            requestedFields: ["displayName", "location", "formattedAddress"] // 預先要求我們需要的欄位
         });
-        autocomplete.addListener("place_changed", () => {
-            const place = autocomplete.getPlace();
-            toggleClearBtn();
-            if (!place.geometry || !place.geometry.location) { manualSearch(); return; }
-            executeRestaurantSearch(place.geometry.location, place.name);
+        
+        // 附加到畫面上
+        container.appendChild(autocompleteElement);
+
+        // 監聽新版事件 "gmp-placeselect"
+        autocompleteElement.addEventListener("gmp-placeselect", async (event) => {
+            const place = event.place;
+            
+            if (!place) {
+                // 如果使用者輸入但沒選選單，執行手動搜尋
+                manualSearch();
+                return;
+            }
+            
+            // 因為我們在初始化時設定了 requestedFields，所以可以直接讀取
+            if(place.location && place.displayName) {
+                executeRestaurantSearch(place.location, place.displayName);
+            }
         });
     }
 
@@ -245,13 +237,17 @@
     }
 
     async function manualSearch() {
-        const query = document.getElementById('address').value;
+        // 從新版元件中取得輸入文字
+        const query = autocompleteElement.inputValue;
         if (!query) return alert("請輸入地點！");
         if (!Place) return;
         
         document.getElementById('status').innerText = "🔍 搜尋中...";
         try {
-            const { places } = await Place.searchByText({ textQuery: query, fields: ['displayName', 'location', 'userRatingCount'] });
+            const { places } = await Place.searchByText({ 
+                textQuery: query, 
+                fields: ['displayName', 'location', 'userRatingCount'] 
+            });
             if (!places || places.length === 0) throw new Error("找不到該地點");
             places.sort((a, b) => (b.userRatingCount || 0) - (a.userRatingCount || 0));
             executeRestaurantSearch(places[0].location, places[0].displayName);
