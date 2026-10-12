@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>熱門餐廳搜尋器 (v14.0 國際獨旅版)</title>
+    <title>熱門餐廳搜尋器 (v16.0 簡介解析版)</title>
     <style>
         /* --- 全域設定 --- */
         body, html { 
@@ -86,6 +86,9 @@
         .top-3 { background: #f44336; }
         .type-badge { font-size: 11px; color: #666; background: #eee; padding: 2px 6px; border-radius: 4px; margin-left: 5px; }
         .solo-badge { background: #e6f4ea; color: #1e8e3e; border: 1px solid #ceead6;} 
+        
+        /* 置頂高亮標籤 */
+        .highlight-badge { background: #fce8e6; color: #d93025; border: 1px solid #f8c1cb; font-weight: bold; }
 
         .info { flex: 1; overflow: hidden; }
         .info h3 { margin: 0 0 5px; font-size: 16px; color: #202124; line-height: 1.4; }
@@ -110,7 +113,7 @@
         .gm-style-iw { padding: 0 !important; }
         .custom-infowindow { padding: 10px; max-width: 220px; }
         .custom-infowindow h3 { margin: 0 0 5px 0; font-size: 15px; }
-        .custom-infowindow p.iw-summary { font-size: 12px; color: #d93025; margin: 0 0 5px 0; }
+        .custom-infowindow p.iw-summary { font-size: 12px; color: #d93025; margin: 0 0 5px 0; font-weight: bold;}
         .custom-infowindow a { font-size: 13px; color: #4285F4; font-weight: bold; }
     </style>
 </head>
@@ -182,6 +185,7 @@
     let markersMap = new Map();
     let autocompleteElement; 
 
+    // 要求取得簡介欄位 (editorialSummary)
     const FETCH_FIELDS = ['displayName', 'location', 'rating', 'userRatingCount', 'formattedAddress', 'id', 'types', 'editorialSummary'];
 
     async function initApp() {
@@ -205,10 +209,8 @@
 
             globalInfoWindow = new InfoWindow({ minWidth: 200 });
             initNewAutocomplete();
-            
             document.getElementById('status').innerText = "✅ 準備就緒";
             document.getElementById('status').classList.add("success-msg");
-
         } catch (error) {
             console.error("初始化失敗:", error);
             document.getElementById('status').innerText = `❌ 初始化失敗`;
@@ -218,8 +220,6 @@
 
     function initNewAutocomplete() {
         const container = document.getElementById("autocomplete-container");
-        
-        // 🔥 解除台灣限制，讓全世界上萬個城市都能自動完成 🔥
         autocompleteElement = new PlaceAutocompleteElement({});
         container.appendChild(autocompleteElement);
 
@@ -229,7 +229,6 @@
             else if (event.place) place = event.place;
             
             if (!place) { manualSearch(); return; }
-            
             try {
                 await place.fetchFields({ fields: ['displayName', 'location'] });
                 if(place.location && place.displayName) executeRestaurantSearch(place.location, place.displayName);
@@ -276,8 +275,8 @@
         if(isNaN(radius) || radius < 100) radius = 1000;
 
         status.className = "";
-        status.innerHTML = `📍 <b>${locationName}</b> (${radius}m) 搜尋中...`;
-        list.innerHTML = '<li style="justify-content: center; padding: 20px;">資料撈取中...</li>';
+        status.innerHTML = `📍 <b>${locationName}</b> (${radius}m) 撈取資料中...`;
+        list.innerHTML = '<li style="justify-content: center; padding: 20px;">正在掃描附近餐廳簡介...</li>';
         clearMarkers();
 
         let zoomLevel = 15;
@@ -290,39 +289,19 @@
         currentMarkers.push(centerMarker);
 
         try {
-            let p1, p2, p3;
-
-            if (diningStyle === 'solo') {
-                document.getElementById('sort-title').innerText = "排序：適合獨自用餐 (國際版)";
-                
-                const keywordSearch = (kw) => Place.searchByText({
-                    textQuery: kw,
-                    locationRestriction: { center: locationCoords, radius: radius },
-                    fields: FETCH_FIELDS,
-                    maxResultCount: 20
-                }).catch(() => ({ places: [] }));
-
-                // 🔥 加入國際通用的 solo dining 關鍵字，搭配中文，確保國內外都能搜到 🔥
-                p1 = keywordSearch("solo dining restaurant"); 
-                p2 = keywordSearch("適合獨自用餐 餐廳");
-                p3 = keywordSearch("一人 餐廳");
-
-            } else {
-                document.getElementById('sort-title').innerText = "排序：評論數 (High to Low)";
-                
-                p1 = Place.searchNearby({
-                    fields: FETCH_FIELDS, locationRestriction: { center: locationCoords, radius: radius },
-                    includedPrimaryTypes: ['restaurant', 'chinese_restaurant', 'japanese_restaurant', 'ramen_restaurant'], maxResultCount: 20
-                });
-                p2 = Place.searchNearby({
-                    fields: FETCH_FIELDS, locationRestriction: { center: locationCoords, radius: radius },
-                    includedPrimaryTypes: ['cafe', 'coffee_shop', 'tea_house', 'bakery', 'bar', 'ice_cream_shop'], maxResultCount: 20
-                });
-                p3 = Place.searchNearby({
-                    fields: FETCH_FIELDS, locationRestriction: { center: locationCoords, radius: radius },
-                    includedPrimaryTypes: ['meal_takeaway', 'fast_food_restaurant', 'meal_delivery'], maxResultCount: 20
-                });
-            }
+            // 🔥 直接放棄用 AI 搜尋，改為「無差別撈取附近所有餐廳」 🔥
+            const p1 = Place.searchNearby({
+                fields: FETCH_FIELDS, locationRestriction: { center: locationCoords, radius: radius },
+                includedPrimaryTypes: ['restaurant', 'chinese_restaurant', 'japanese_restaurant', 'ramen_restaurant'], maxResultCount: 20
+            });
+            const p2 = Place.searchNearby({
+                fields: FETCH_FIELDS, locationRestriction: { center: locationCoords, radius: radius },
+                includedPrimaryTypes: ['cafe', 'coffee_shop', 'tea_house', 'bakery', 'bar', 'ice_cream_shop'], maxResultCount: 20
+            });
+            const p3 = Place.searchNearby({
+                fields: FETCH_FIELDS, locationRestriction: { center: locationCoords, radius: radius },
+                includedPrimaryTypes: ['meal_takeaway', 'fast_food_restaurant', 'meal_delivery'], maxResultCount: 20
+            });
 
             const results = await Promise.all([p1, p2, p3]);
             let allPlaces = [];
@@ -332,15 +311,46 @@
                 status.innerText = `⚠️ 範圍內無資料`; list.innerHTML = '<li style="justify-content: center;">無符合條件的資料</li>'; return;
             }
 
+            // 去除重複店家
             const uniquePlaces = new Map();
             allPlaces.forEach(place => { if(!uniquePlaces.has(place.id)) uniquePlaces.set(place.id, place); });
             
             const finalResults = Array.from(uniquePlaces.values());
-            finalResults.sort((a, b) => (b.userRatingCount || 0) - (a.userRatingCount || 0));
+
+            // 🔥 核心魔法：用程式自己讀「簡介」，標記獨旅友善餐廳 🔥
+            const soloRegex = /獨|一人|單人|個人|solo|alone|individual/i; 
+            
+            finalResults.forEach(place => {
+                let summaryText = place.editorialSummary ? place.editorialSummary : "";
+                let nameText = place.displayName ? place.displayName : "";
+                // 如果簡介或店名中包含獨旅字眼，就給他一個專屬標記
+                if (soloRegex.test(summaryText) || soloRegex.test(nameText)) {
+                    place._isSoloFriendly = true;
+                } else {
+                    place._isSoloFriendly = false;
+                }
+            });
+
+            // 🔥 排序邏輯：有標記的強制排最前面，其次比評論數 🔥
+            finalResults.sort((a, b) => {
+                if (diningStyle === 'solo') {
+                    if (a._isSoloFriendly && !b._isSoloFriendly) return -1;
+                    if (!a._isSoloFriendly && b._isSoloFriendly) return 1;
+                }
+                return (b.userRatingCount || 0) - (a.userRatingCount || 0);
+            });
+
             const topResults = finalResults.slice(0, 30);
 
-            status.innerHTML = `✅ 找到 ${finalResults.length} 間，顯示前 ${topResults.length} 間`;
-            status.className = "success-msg"; list.innerHTML = "";
+            if (diningStyle === 'solo') {
+                document.getElementById('sort-title').innerText = "排序：簡介分析 (獨旅優先)";
+            } else {
+                document.getElementById('sort-title').innerText = "排序：評論數 (High to Low)";
+            }
+
+            status.innerHTML = `✅ 掃描完畢！為您顯示前 ${topResults.length} 間`;
+            status.className = "success-msg"; 
+            list.innerHTML = "";
 
             topResults.forEach((place, index) => {
                 const name = place.displayName;
@@ -349,22 +359,34 @@
                 const address = place.formattedAddress || "";
                 
                 const summary = place.editorialSummary ? place.editorialSummary : ""; 
-                
                 const rankClass = (index + 1) <= 3 ? "rank top-3" : "rank";
                 
-                let typeLabel = "餐飲";
+                let typeLabel = "熱門餐廳";
                 let badgeClass = "type-badge";
                 
-                if (diningStyle === 'solo') {
-                    typeLabel = "★ 獨旅友善"; badgeClass += " solo-badge";
+                // 根據我們剛剛讀出的結果給予高亮標籤
+                if (diningStyle === 'solo' && place._isSoloFriendly) {
+                    typeLabel = "💡 簡介認證：適合獨旅"; 
+                    badgeClass += " highlight-badge";
+                } else if (diningStyle === 'solo') {
+                    typeLabel = "熱門餐廳"; 
+                    badgeClass += " solo-badge";
                 } else {
                     const types = place.types || [];
-                    if(types.includes('ramen_restaurant') || types.includes('fast_food_restaurant')) { typeLabel = "一人友善"; }
-                    else if(types.includes('cafe') || types.includes('coffee_shop')) { typeLabel = "咖啡輕食"; }
-                    else if(types.includes('meal_takeaway')) { typeLabel = "外帶"; }
+                    if(types.includes('ramen_restaurant') || types.includes('fast_food_restaurant')) typeLabel = "單人友善";
+                    else if(types.includes('cafe') || types.includes('coffee_shop')) typeLabel = "咖啡輕食";
+                    else if(types.includes('meal_takeaway')) typeLabel = "外帶";
                 }
 
-                const summaryHtml = summary ? `<p class="summary">💡 簡介：${summary}</p>` : "";
+                // 若有簡介，顯示出來，若剛好是獨旅友善，把字變更明顯
+                let summaryHtml = "";
+                if (summary) {
+                    if (place._isSoloFriendly && diningStyle === 'solo') {
+                        summaryHtml = `<p class="summary" style="background:#fce8e6; border: 1px solid #f8c1cb;">🔍 發現關鍵字：${summary}</p>`;
+                    } else {
+                        summaryHtml = `<p class="summary">💡 簡介：${summary}</p>`;
+                    }
+                }
 
                 const item = document.createElement('li');
                 item.innerHTML = `
@@ -385,7 +407,7 @@
                     if(window.innerWidth <= 768) { window.scrollTo({ top: 0, behavior: 'smooth' }); }
                 });
                 list.appendChild(item);
-                createMarkerWithInfoWindow(place, index + 1, rankClass, item, summary);
+                createMarkerWithInfoWindow(place, index + 1, rankClass, item, summary, place._isSoloFriendly && diningStyle === 'solo');
             });
 
         } catch (error) {
@@ -394,14 +416,17 @@
         }
     }
 
-    function createMarkerWithInfoWindow(place, rank, rankClass, listItem, summary) {
+    function createMarkerWithInfoWindow(place, rank, rankClass, listItem, summary, isHighlighted) {
         const pinContent = document.createElement("div");
         pinContent.className = rankClass; pinContent.textContent = rank;
         
         const marker = new AdvancedMarkerElement({ map: map, position: place.location, title: place.displayName, content: pinContent, zIndex: 100 - rank });
         const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.displayName)}&query_place_id=${place.id}`;
         
-        const summaryHtml = summary ? `<p class="iw-summary">${summary}</p>` : "";
+        let summaryHtml = "";
+        if (summary) {
+            summaryHtml = isHighlighted ? `<p class="iw-summary" style="background:#fce8e6; padding:2px;">🔍 ${summary}</p>` : `<p class="iw-summary">${summary}</p>`;
+        }
 
         const infoWindowContent = `
             <div class="custom-infowindow">
@@ -412,7 +437,6 @@
             </div>
         `;
 
-        // 修復了右側 Console 裡跳出的 'gmp-click' 警告
         marker.addEventListener('gmp-click', () => {
             globalInfoWindow.close();
             globalInfoWindow.setContent(infoWindowContent);
