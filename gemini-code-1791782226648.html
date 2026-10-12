@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>熱門餐廳搜尋器 (v9.0 穩定版)</title>
+    <style>
+        /* --- 全域設定 --- */
+        body, html { 
+            margin: 0; font-family: 'Microsoft JhengHei', sans-serif; 
+            background: #f4f7f6; 
+            overflow-x: hidden; 
+        }
+        
+        .main-container {
+            max-width: 1200px; margin: 0 auto; 
+            min-height: 100vh; 
+            display: flex; flex-direction: column;
+        }
+
+        /* --- 搜尋區塊 --- */
+        .search-section {
+            background: white; padding: 10px; 
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            position: sticky; top: 0; z-index: 1000; 
+        }
+
+        .search-box { display: flex; gap: 8px; align-items: center; width: 100%; }
+
+        .input-wrapper { position: relative; flex: 1; display: flex; align-items: center; }
+        
+        input#address { 
+            width: 100%; padding: 12px 35px 12px 12px; 
+            font-size: 16px; border: 1px solid #ddd; border-radius: 8px; outline: none; 
+            box-sizing: border-box; background: #fff;
+        }
+        input#address:focus { border-color: #4285F4; }
+
+        .clear-btn {
+            position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+            background: #e0e0e0; color: #555; border: none; border-radius: 50%;
+            width: 22px; height: 22px; line-height: 22px; text-align: center;
+            font-size: 14px; cursor: pointer; display: none; padding: 0;
+        }
+
+        .radius-group { position: relative; width: 85px; flex-shrink: 0; }
+        input#radius {
+            width: 100%; padding: 12px 5px; font-size: 16px; text-align: center;
+            border: 1px solid #ddd; border-radius: 8px; outline: none;
+            box-sizing: border-box; background: #fff;
+        }
+        
+        button#search-btn { 
+            flex-shrink: 0; padding: 12px 15px; font-size: 16px; 
+            background: #4285F4; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; 
+        }
+        button#search-btn:hover { background: #3367D6; }
+
+        .btn-text { display: none; }
+        .btn-icon { display: inline; }
+        @media (min-width: 769px) { 
+            .btn-text { display: inline; } 
+            .btn-icon { display: none; } 
+            .radius-group { width: 120px; }
+        }
+
+        #status { 
+            text-align: center; margin-top: 5px; font-size: 12px; color: #d32f2f; font-weight: bold; 
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; height: 18px;
+        }
+        .success-msg { color: #2e7d32 !important; }
+
+        /* --- 內容區塊 --- */
+        .content-wrapper { flex: 1; display: flex; gap: 15px; padding: 10px; }
+        
+        #map-container { 
+            flex: 6; background: #eee; border-radius: 12px; overflow: hidden; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1); height: 500px; 
+        }
+        #map { width: 100%; height: 100%; }
+        
+        #list-container { 
+            flex: 4; background: white; border-radius: 12px; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1); border: 1px solid #eee;
+            display: flex; flex-direction: column;
+        }
+
+        .list-header {
+            padding: 12px 15px; background: #f8f9fa; border-bottom: 1px solid #eee;
+            color: #555; font-weight: bold; font-size: 13px;
+            display: flex; justify-content: space-between; align-items: center; border-radius: 12px 12px 0 0;
+        }
+        
+        ul#list { list-style: none; padding: 0; margin: 0; }
+        li { background: #fff; border-bottom: 1px solid #eee; padding: 15px; display: flex; align-items: flex-start; gap: 12px; cursor: pointer; }
+        li:hover { background: #f9f9f9; }
+        
+        .rank { background: #999; color: white; width: 24px; height: 24px; border-radius: 50%; text-align: center; line-height: 24px; font-size: 12px; flex-shrink: 0; margin-top: 2px; }
+        .top-3 { background: #f44336; }
+        .type-badge { font-size: 11px; color: #666; background: #eee; padding: 2px 6px; border-radius: 4px; margin-left: 5px; }
+
+        .info { flex: 1; }
+        .info h3 { margin: 0 0 5px; font-size: 16px; color: #202124; line-height: 1.4; }
+        .info p { margin: 0; color: #5f6368; font-size: 13px; }
+        .meta-tag { display: inline-block; background: #e8f0fe; color: #1967d2; font-size: 12px; padding: 4px 8px; border-radius: 4px; margin-top: 6px; }
+
+        /* --- 手機版專用調整 (<= 768px) --- */
+        @media (max-width: 768px) {
+            .content-wrapper { flex-direction: column; padding: 0; gap: 0; }
+            #map-container { flex: none; width: 100%; height: 35vh; border-radius: 0; }
+            #list-container { flex: none; width: 100%; border-radius: 0; box-shadow: none; border: none; padding-bottom: 50px; }
+        }
+
+        /* InfoWindow */
+        .gm-style-iw { padding: 0 !important; }
+        .custom-infowindow { padding: 10px; max-width: 220px; }
+        .custom-infowindow h3 { margin: 0 0 5px 0; font-size: 15px; }
+        .custom-infowindow a { font-size: 13px; color: #4285F4; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="main-container">
+    <div class="search-section">
+        <div class="search-box">
+            <div class="input-wrapper">
+                <input type="text" id="address" placeholder="地點" oninput="toggleClearBtn()">
+                <button class="clear-btn" id="clear-btn" onclick="clearAddress()">×</button>
+            </div>
+            
+            <div class="radius-group">
+                <input type="number" id="radius" value="1000" min="100" max="50000" step="100" list="radius-presets" placeholder="半徑">
+                <datalist id="radius-presets">
+                    <option value="500">500m</option>
+                    <option value="1000">1km</option>
+                    <option value="3000">3km</option>
+                </datalist>
+            </div>
+
+            <button id="search-btn" onclick="manualSearch()">
+                <span class="btn-text">搜尋</span>
+                <span class="btn-icon">🔍</span>
+            </button>
+        </div>
+        <div id="status">地圖載入中...</div>
+    </div>
+
+    <div class="content-wrapper">
+        <div id="map-container"><div id="map"></div></div>
+        
+        <div id="list-container">
+            <div class="list-header">
+                <span>排序：評論數 (High to Low)</span>
+                <span style="font-size:11px; color:#888;">混合結果</span>
+            </div>
+            <ul id="list">
+                <li style="color:#666; justify-content: center; padding: 30px;">請輸入地點開始搜尋</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 👇👇👇 請在此填入您的 API Key 👇👇👇
+    const MY_API_KEY = "在此處貼上你的API_KEY"; 
+    // 👆👆👆 ----------------------- 👆👆👆
+</script>
+
+<script>
+    (g=>{var h,a,k,p="The Google Maps JavaScript API",c="google",l="importLibrary",q="__ib__",m=document,b=window;b=b[c]||(b[c]={});var d=b.maps||(b.maps={}),r=new Set,e=new URLSearchParams,u=()=>h||(h=new Promise(async(f,n)=>{await (a=m.createElement("script"));e.set("libraries",[...r]+"");for(k in g)e.set(k.replace(/[A-Z]/g,t=>"_"+t[0].toLowerCase()),g[k]);e.set("callback",c+".maps."+q);a.src=`https://maps.${c}apis.com/maps/api/js?`+e;d[q]=f;a.onerror=()=>h=n(Error(p+" could not load."));a.nonce=m.querySelector("script[nonce]")?.nonce||"";m.head.append(a)}));d[l]?console.warn(p+" only loads once. Ignoring:",g):d[l]=(f,...n)=>r.add(f)&&u().then(()=>d[l](f,...n))})({
+        key: MY_API_KEY,
+        v: "weekly"
+    });
+
+    let map;
+    let Place, AdvancedMarkerElement, Autocomplete, InfoWindow;
+    let currentMarkers = [];
+    let globalInfoWindow; 
+    let markersMap = new Map();
+
+    function toggleClearBtn() {
+        const input = document.getElementById('address');
+        const btn = document.getElementById('clear-btn');
+        btn.style.display = input.value.length > 0 ? 'block' : 'none';
+    }
+
+    function clearAddress() {
+        const input = document.getElementById('address');
+        input.value = '';
+        toggleClearBtn();
+        input.focus();
+    }
+
+    async function initApp() {
+        if(!MY_API_KEY || MY_API_KEY.includes("在此處")) {
+            document.getElementById('status').innerText = "⚠️ 錯誤：請填入 API Key"; return;
+        }
+        try {
+            const mapsLib = await google.maps.importLibrary("maps");
+            const placesLib = await google.maps.importLibrary("places");
+            const markerLib = await google.maps.importLibrary("marker");
+
+            Place = placesLib.Place;
+            Autocomplete = placesLib.Autocomplete;
+            AdvancedMarkerElement = markerLib.AdvancedMarkerElement;
+            InfoWindow = mapsLib.InfoWindow;
+
+            map = new mapsLib.Map(document.getElementById("map"), {
+                center: { lat: 25.0330, lng: 121.5654 }, 
+                zoom: 14, mapId: "DEMO_MAP_ID", mapTypeControl: false, streetViewControl: false, fullscreenControl: false
+            });
+
+            globalInfoWindow = new InfoWindow({ minWidth: 200 });
+            initAutocomplete();
+            
+            document.getElementById('status').innerText = "✅ 準備就緒";
+            document.getElementById('status').classList.add("success-msg");
+
+        } catch (error) {
+            console.error("初始化失敗:", error);
+            document.getElementById('status').innerText = `❌ 初始化失敗`;
+        }
+    }
+    initApp();
+
+    function initAutocomplete() {
+        const input = document.getElementById("address");
+        const autocomplete = new Autocomplete(input, {
+            fields: ["geometry", "name", "formatted_address"],
+            types: ["establishment", "geocode"], componentRestrictions: { country: "tw" }
+        });
+        autocomplete.addListener("place_changed", () => {
+            const place = autocomplete.getPlace();
+            toggleClearBtn();
+            if (!place.geometry || !place.geometry.location) { manualSearch(); return; }
+            executeRestaurantSearch(place.geometry.location, place.name);
+        });
+    }
+
+    function clearMarkers() {
+        currentMarkers.forEach(m => m.map = null);
+        currentMarkers = [];
+        markersMap.clear();
+        if(globalInfoWindow) globalInfoWindow.close();
+    }
+
+    async function manualSearch() {
+        const query = document.getElementById('address').value;
+        if (!query) return alert("請輸入地點！");
+        if (!Place) return;
+        
+        document.getElementById('status').innerText = "🔍 搜尋中...";
+        try {
+            const { places } = await Place.searchByText({ textQuery: query, fields: ['displayName', 'location', 'userRatingCount'] });
+            if (!places || places.length === 0) throw new Error("找不到該地點");
+            places.sort((a, b) => (b.userRatingCount || 0) - (a.userRatingCount || 0));
+            executeRestaurantSearch(places[0].location, places[0].displayName);
+        } catch (error) { 
+            document.getElementById('status').innerText = "❌ 找不到地點";
+        }
+    }
+
+    async function executeRestaurantSearch(locationCoords, locationName) {
+        const status = document.getElementById('status');
+        const list = document.getElementById('list');
+        const radiusInput = document.getElementById('radius');
+        let radius = parseInt(radiusInput.value);
+        if(isNaN(radius) || radius < 100) radius = 1000;
+
+        status.className = "";
+        status.innerHTML = `📍 <b>${locationName}</b> (${radius}m) 搜尋中...`;
+        list.innerHTML = '<li style="justify-content: center; padding: 20px;">資料載入中...</li>';
+        clearMarkers();
+
+        let zoomLevel = 15;
+        if (radius <= 500) zoomLevel = 16;
+        else if (radius >= 5000) zoomLevel = 13;
+        else if (radius >= 10000) zoomLevel = 12;
+
+        map.setCenter(locationCoords); map.setZoom(zoomLevel);
+        const centerMarker = new AdvancedMarkerElement({ map: map, position: locationCoords, title: "中心點" });
+        currentMarkers.push(centerMarker);
+
+        try {
+            const p1 = Place.searchNearby({
+                fields: ['displayName', 'location', 'rating', 'userRatingCount', 'formattedAddress', 'id', 'types'],
+                locationRestriction: { center: locationCoords, radius: radius },
+                includedPrimaryTypes: ['restaurant', 'chinese_restaurant', 'japanese_restaurant', 'ramen_restaurant'], maxResultCount: 20
+            });
+            const p2 = Place.searchNearby({
+                fields: ['displayName', 'location', 'rating', 'userRatingCount', 'formattedAddress', 'id', 'types'],
+                locationRestriction: { center: locationCoords, radius: radius },
+                includedPrimaryTypes: ['cafe', 'coffee_shop', 'tea_house', 'bakery', 'bar', 'ice_cream_shop'], maxResultCount: 20
+            });
+            const p3 = Place.searchNearby({
+                fields: ['displayName', 'location', 'rating', 'userRatingCount', 'formattedAddress', 'id', 'types'],
+                locationRestriction: { center: locationCoords, radius: radius },
+                includedPrimaryTypes: ['meal_takeaway', 'fast_food_restaurant', 'meal_delivery'], maxResultCount: 20
+            });
+
+            const results = await Promise.all([p1, p2, p3]);
+            let allPlaces = [];
+            results.forEach(res => { if(res.places) allPlaces = allPlaces.concat(res.places); });
+
+            if (allPlaces.length === 0) {
+                status.innerText = `⚠️ 範圍內無資料`; list.innerHTML = '<li style="justify-content: center;">無資料</li>'; return;
+            }
+
+            const uniquePlaces = new Map();
+            allPlaces.forEach(place => { if(!uniquePlaces.has(place.id)) uniquePlaces.set(place.id, place); });
+            
+            const finalResults = Array.from(uniquePlaces.values());
+            finalResults.sort((a, b) => (b.userRatingCount || 0) - (a.userRatingCount || 0));
+            const topResults = finalResults.slice(0, 30);
+
+            status.innerHTML = `✅ 找到 ${finalResults.length} 間，顯示前 ${topResults.length} 間`;
+            status.className = "success-msg"; list.innerHTML = "";
+
+            topResults.forEach((place, index) => {
+                const name = place.displayName;
+                const rating = place.rating ? place.rating : "N/A";
+                const reviews = place.userRatingCount ? place.userRatingCount : 0;
+                const address = place.formattedAddress || "";
+                const rankClass = (index + 1) <= 3 ? "rank top-3" : "rank";
+                
+                let typeLabel = "";
+                const types = place.types || [];
+                if(types.includes('cafe') || types.includes('coffee_shop') || types.includes('tea_house')) typeLabel = "飲料/咖啡";
+                else if(types.includes('ramen_restaurant')) typeLabel = "拉麵";
+                else if(types.includes('bakery')) typeLabel = "烘焙";
+                else if(types.includes('meal_takeaway')) typeLabel = "外帶";
+                else typeLabel = "餐飲";
+
+                const item = document.createElement('li');
+                item.innerHTML = `
+                    <div class="${rankClass}">${index + 1}</div>
+                    <div class="info">
+                        <h3>${name} <span style="font-size:0.8em; color:#fbbc04;">★${rating}</span><span class="type-badge">${typeLabel}</span></h3>
+                        <p>${address}</p>
+                        <div class="meta-tag">🔥 ${reviews.toLocaleString()} 則評論</div>
+                    </div>
+                `;
+                
+                item.addEventListener('click', () => {
+                    map.setCenter(place.location); map.setZoom(17);
+                    const targetMarker = markersMap.get(place.id);
+                    if(targetMarker) google.maps.event.trigger(targetMarker, 'click'); 
+                    if(window.innerWidth <= 768) { window.scrollTo({ top: 0, behavior: 'smooth' }); }
+                });
+                list.appendChild(item);
+                createMarkerWithInfoWindow(place, index + 1, rankClass, item);
+            });
+
+        } catch (error) {
+            console.error(error);
+            status.innerText = `❌ 錯誤`; list.innerHTML = `<li style="justify-content: center; color: red;">${error.message}</li>`;
+        }
+    }
+
+    function createMarkerWithInfoWindow(place, rank, rankClass, listItem) {
+        const pinContent = document.createElement("div");
+        pinContent.className = rankClass; pinContent.textContent = rank;
+        const marker = new AdvancedMarkerElement({ map: map, position: place.location, title: place.displayName, content: pinContent, zIndex: 100 - rank });
+        const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.displayName)}&query_place_id=${place.id}`;
+        
+        const infoWindowContent = `
+            <div class="custom-infowindow">
+                <h3>${place.displayName}</h3>
+                <p>${place.formattedAddress || "無地址資訊"}</p>
+                <a href="${googleMapsUrl}" target="_blank">在 Google 地圖上查看 ↗</a>
+            </div>
+        `;
+
+        marker.addListener('click', () => {
+            globalInfoWindow.close();
+            globalInfoWindow.setContent(infoWindowContent);
+            globalInfoWindow.open(marker.map, marker);
+        });
+
+        currentMarkers.push(marker);
+        markersMap.set(place.id, marker);
+    }
+</script>
+
+</body>
+</html>
