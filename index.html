@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>熱門餐廳搜尋器 (v10.0 全新元件版)</title>
+    <title>熱門餐廳搜尋器 (v10.1 新元件修正版)</title>
     <style>
         /* --- 全域設定 --- */
         body, html { 
@@ -15,7 +15,7 @@
             max-width: 1200px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column;
         }
 
-        /* --- 搜尋區塊 (Sticky) --- */
+        /* --- 搜尋區塊 --- */
         .search-section {
             background: white; padding: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);
             position: sticky; top: 0; z-index: 1000; 
@@ -28,7 +28,6 @@
             flex: 3; min-width: 200px;
         }
         
-        /* 針對新版 Web Component 的基本微調 */
         gmp-place-autocomplete {
             width: 100%;
             --gmp-place-autocomplete-input-border-radius: 8px;
@@ -36,14 +35,12 @@
             --gmp-place-autocomplete-input-padding: 10px;
         }
 
-        /* 距離輸入框 */
         .radius-group { position: relative; width: 85px; flex-shrink: 0; }
         input#radius {
             width: 100%; padding: 12px 5px; font-size: 16px; text-align: center;
             border: 1px solid #ddd; border-radius: 8px; outline: none; background: #fff; box-sizing: border-box;
         }
         
-        /* 搜尋按鈕 */
         button#search-btn { 
             flex-shrink: 0; padding: 12px 15px; font-size: 16px; 
             background: #4285F4; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; 
@@ -111,7 +108,6 @@
     <div class="search-section">
         <div class="search-box">
             
-            <!-- 新版 Google Autocomplete 容器 -->
             <div id="autocomplete-container"></div>
             
             <div class="radius-group">
@@ -163,7 +159,7 @@
     let currentMarkers = [];
     let globalInfoWindow; 
     let markersMap = new Map();
-    let autocompleteElement; // 儲存全域的新版搜尋框元件
+    let autocompleteElement; 
 
     async function initApp() {
         if(!MY_API_KEY || MY_API_KEY.includes("在此處")) {
@@ -175,7 +171,6 @@
             const markerLib = await google.maps.importLibrary("marker");
 
             Place = placesLib.Place;
-            // 🔥 載入最新版的 PlaceAutocompleteElement 🔥
             PlaceAutocompleteElement = placesLib.PlaceAutocompleteElement; 
             AdvancedMarkerElement = markerLib.AdvancedMarkerElement;
             InfoWindow = mapsLib.InfoWindow;
@@ -187,7 +182,6 @@
 
             globalInfoWindow = new InfoWindow({ minWidth: 200 });
             
-            // 初始化新版搜尋框
             initNewAutocomplete();
             
             document.getElementById('status').innerText = "✅ 準備就緒";
@@ -203,28 +197,30 @@
     function initNewAutocomplete() {
         const container = document.getElementById("autocomplete-container");
         
-        // 建立最新版的元件
+        // 🔥 移除舊版的 requestedFields，只設定國家限制 🔥
         autocompleteElement = new PlaceAutocompleteElement({
-            componentRestrictions: { country: ["tw"] },
-            requestedFields: ["displayName", "location", "formattedAddress"] // 預先要求我們需要的欄位
+            componentRestrictions: { country: ["tw"] }
         });
         
-        // 附加到畫面上
         container.appendChild(autocompleteElement);
 
-        // 監聽新版事件 "gmp-placeselect"
         autocompleteElement.addEventListener("gmp-placeselect", async (event) => {
             const place = event.place;
             
             if (!place) {
-                // 如果使用者輸入但沒選選單，執行手動搜尋
                 manualSearch();
                 return;
             }
             
-            // 因為我們在初始化時設定了 requestedFields，所以可以直接讀取
-            if(place.location && place.displayName) {
-                executeRestaurantSearch(place.location, place.displayName);
+            try {
+                // 🔥 新版 API 必須在這裡手動「獲取」需要的欄位資料 🔥
+                await place.fetchFields({ fields: ['displayName', 'location'] });
+                
+                if(place.location && place.displayName) {
+                    executeRestaurantSearch(place.location, place.displayName);
+                }
+            } catch (err) {
+                console.error("獲取地點資料失敗", err);
             }
         });
     }
@@ -237,7 +233,6 @@
     }
 
     async function manualSearch() {
-        // 從新版元件中取得輸入文字
         const query = autocompleteElement.inputValue;
         if (!query) return alert("請輸入地點！");
         if (!Place) return;
