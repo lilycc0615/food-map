@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>熱門餐廳搜尋器 (v10.1 新元件修正版)</title>
+    <title>熱門餐廳搜尋器 (v10.2 新元件完美版)</title>
     <style>
         /* --- 全域設定 --- */
         body, html { 
@@ -15,7 +15,7 @@
             max-width: 1200px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column;
         }
 
-        /* --- 搜尋區塊 --- */
+        /* --- 搜尋區塊 (Sticky) --- */
         .search-section {
             background: white; padding: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);
             position: sticky; top: 0; z-index: 1000; 
@@ -35,12 +35,14 @@
             --gmp-place-autocomplete-input-padding: 10px;
         }
 
+        /* 距離輸入框 */
         .radius-group { position: relative; width: 85px; flex-shrink: 0; }
         input#radius {
             width: 100%; padding: 12px 5px; font-size: 16px; text-align: center;
             border: 1px solid #ddd; border-radius: 8px; outline: none; background: #fff; box-sizing: border-box;
         }
         
+        /* 搜尋按鈕 */
         button#search-btn { 
             flex-shrink: 0; padding: 12px 15px; font-size: 16px; 
             background: #4285F4; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; 
@@ -197,15 +199,21 @@
     function initNewAutocomplete() {
         const container = document.getElementById("autocomplete-container");
         
-        // 🔥 移除舊版的 requestedFields，只設定國家限制 🔥
         autocompleteElement = new PlaceAutocompleteElement({
             componentRestrictions: { country: ["tw"] }
         });
         
         container.appendChild(autocompleteElement);
 
-        autocompleteElement.addEventListener("gmp-placeselect", async (event) => {
-            const place = event.place;
+        // 🔥 更新了 Google 官方的事件名稱與取值方式 🔥
+        autocompleteElement.addEventListener("gmp-select", async (event) => {
+            let place;
+            // 相容不同的事件回傳格式
+            if (event.placePrediction) {
+                place = event.placePrediction.toPlace();
+            } else if (event.place) {
+                place = event.place;
+            }
             
             if (!place) {
                 manualSearch();
@@ -213,7 +221,6 @@
             }
             
             try {
-                // 🔥 新版 API 必須在這裡手動「獲取」需要的欄位資料 🔥
                 await place.fetchFields({ fields: ['displayName', 'location'] });
                 
                 if(place.location && place.displayName) {
@@ -233,11 +240,26 @@
     }
 
     async function manualSearch() {
-        const query = autocompleteElement.inputValue;
-        if (!query) return alert("請輸入地點！");
-        if (!Place) return;
+        let query = "";
         
-        document.getElementById('status').innerText = "🔍 搜尋中...";
+        // 🔥 破解 Google 新元件：直接潛入影子 DOM (Shadow DOM) 抓出輸入的文字 🔥
+        if (autocompleteElement && autocompleteElement.shadowRoot) {
+            const innerInput = autocompleteElement.shadowRoot.querySelector('input');
+            if (innerInput) {
+                query = innerInput.value;
+            }
+        }
+        
+        // 備用抓取方法
+        if (!query && autocompleteElement) {
+            query = autocompleteElement.value || "";
+        }
+
+        if (!query || query.trim() === "") {
+            return alert("請輸入地點！");
+        }
+        
+        document.getElementById('status').innerText = "🔍 搜尋地點中...";
         try {
             const { places } = await Place.searchByText({ 
                 textQuery: query, 
@@ -247,7 +269,7 @@
             places.sort((a, b) => (b.userRatingCount || 0) - (a.userRatingCount || 0));
             executeRestaurantSearch(places[0].location, places[0].displayName);
         } catch (error) { 
-            document.getElementById('status').innerText = "❌ 找不到地點";
+            document.getElementById('status').innerText = "❌ 找不到地點，請換個關鍵字";
         }
     }
 
